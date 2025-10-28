@@ -1,0 +1,58 @@
+name: Version, Tag, and Update Changelog
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'workflows/**/*.json'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v3
+
+      - name: Set up Git
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+
+      - name: Get latest tag
+        id: get_tag
+        run: |
+          latest_tag=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          echo "latest_tag=$latest_tag" >> $GITHUB_ENV
+
+      - name: Bump version
+        id: bump_version
+        run: |
+          IFS='.' read -r major minor patch <<<"${latest_tag#v}"
+          patch=$((patch+1))
+          new_tag="v$major.$minor.$patch"
+          echo "new_tag=$new_tag" >> $GITHUB_ENV
+
+      - name: Update CHANGELOG.md
+        uses: stefanzweifel/changelog-updater-action@v1
+        with:
+          latest-version: ${{ env.new_tag }}
+          release-notes: "Automated release of updated workflows."
+
+      - name: Commit updated CHANGELOG.md
+        run: |
+          git add CHANGELOG.md
+          git commit -m "docs: update changelog for ${{ env.new_tag }}" || echo "No changes to commit"
+          git push
+
+      - name: Create new tag
+        run: |
+          git tag ${{ env.new_tag }}
+          git push origin ${{ env.new_tag }}
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.new_tag }}
+          name: "Workflow Release ${{ env.new_tag }}"
+          body: "Automated release of updated workflows."
